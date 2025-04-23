@@ -85,11 +85,11 @@ model schedules {
 }
 
 model users {
-  id        Int       @id @unique(map: "id_UNIQUE") @default(autoincrement())
-  name      String?   @db.VarChar(255)
-  email     String?   @unique(map: "email_UNIQUE") @db.VarChar(255)
-  password  String?   @db.VarChar(255)
-  createdAt DateTime? @default(now()) @db.DateTime(0)
+  id        Int      @id @unique(map: "id_UNIQUE") @default(autoincrement())
+  name      String   @db.VarChar(255)
+  email     String   @unique(map: "email_UNIQUE") @db.VarChar(255)
+  password  String   @db.VarChar(255)
+  createdAt DateTime @default(now()) @db.DateTime(0)
 }
 
 enum courses_period {
