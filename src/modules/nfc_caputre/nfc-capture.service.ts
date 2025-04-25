@@ -1,16 +1,22 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateNfcCaptureBody } from './dto/create-nfc-capture-body.dto';
+import { MovementsService } from '../movements/movements.service';
 
 @Injectable()
 export class NfcCaptureService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly movementService: MovementsService,
+  ) {}
 
   async create(data: CreateNfcCaptureBody) {
     await this.prisma.$executeRaw`
       INSERT INTO nfc_capture (nfc_tag, datetime)
       VALUES (${data.nfc_tag}, ${data.datetime})
     `;
+
+    await this.movementService.handleNfcMovement(data.nfc_tag, data.datetime);
 
     //optional
     const [capture] = await this.prisma.$queryRaw<
