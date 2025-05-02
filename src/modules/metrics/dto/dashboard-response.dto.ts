@@ -5,8 +5,8 @@ export class DashboardResponseDto {
   }[];
 
   modaNotebook: {
-    nome: string;
-    vezes: number;
+    nome_notebook: string;
+    quantidade: number;
   };
 
   mediaTempoUso: number;
@@ -14,16 +14,18 @@ export class DashboardResponseDto {
   medianaTempoUso: number;
 
   retiradaPorPeriodo: {
-    matutino: number;
-    noturno: number;
-  };
-
-  top5TempoUso: {
-    notebook: string;
-    tempo_medio: number;
+    period: string;
+    quantidade: number;
   }[];
 
-  desvioPadrao: number;
+  top5TempoUso: {
+    nome_notebook: string;
+    tempo_medio_uso_minutos: number;
+  }[];
+
+  desvioPadrao: {
+    desvio_padrao: string | number;
+  };
 
   distribuicaoNormal: {
     minutos: number;
@@ -31,7 +33,18 @@ export class DashboardResponseDto {
   }[];
 
   previsaoRetiradas: {
-    proxima_data: string; // ou Date se quiser formatar no front
+    proxima_data: string;
     quantidade_estimativa: number;
-  };
+  }[];
+
+  retiradasPorDiaUltimaSemana: {
+    dia: string;
+    total_retiradas: number;
+  }[];
+
+  notebooksNaoDevolvidos: {
+    device_name: string;
+    discipline: string;
+    checkout_datetime: string;
+  }[];
 }

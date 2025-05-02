@@ -7,7 +7,7 @@ export class MetricsController {
   constructor(private readonly metricsService: MetricsService) {}
 
   @Get()
-  async getDashboard() {
+  async getDashboard(): Promise<DashboardResponseDto> {
     return this.metricsService.getDashboardData();
   }
 }
