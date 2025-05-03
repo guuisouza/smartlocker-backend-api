@@ -1,48 +1,49 @@
 export class DashboardResponseDto {
-  retiradaPorCurso: {
-    curso: string;
-    quantidade: number;
+  withdrawalsByCourse: {
+    course: string;
+    total: number;
   }[];
 
-  modaNotebook: {
-    nome_notebook: string;
-    quantidade: number;
+  mostFrequentNotebook: {
+    notebookName: string;
+    notebookSerialNumber: string;
+    total: number;
   };
 
-  mediaTempoUso: number;
+  averageUsageTime: number;
 
-  medianaTempoUso: number;
+  medianUsageTime: number;
 
-  retiradaPorPeriodo: {
+  withdrawalsByPeriod: {
     period: string;
-    quantidade: number;
+    quantity: number;
   }[];
 
-  top5TempoUso: {
-    nome_notebook: string;
-    tempo_medio_uso_minutos: number;
+  top5LongestAverageUsage: {
+    notebookName: string;
+    averageUsageTimeMinutes: number;
   }[];
 
-  desvioPadrao: {
-    desvio_padrao: string | number;
+  usageTimeStdDev: {
+    standardDeviation: string | number;
   };
 
-  distribuicaoNormal: {
-    minutos: number;
-    probabilidade: number;
+  normalDistribution: {
+    minutes: number;
+    probability: number;
   }[];
 
-  previsaoRetiradas: {
-    proxima_data: string;
-    quantidade_estimativa: number;
+  withdrawalForecast: {
+    next_date: string;
+    estimated_quantity: number;
   }[];
 
-  retiradasPorDiaUltimaSemana: {
-    dia: string;
-    total_retiradas: number;
+  dailyWithdrawalsLastWeek: {
+    day: string;
+    total_withdrawals: number;
   }[];
 
-  notebooksNaoDevolvidos: {
+  unreturnedNotebooks: {
     device_name: string;
     discipline: string;
     checkout_datetime: string;

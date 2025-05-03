@@ -5,15 +5,15 @@ import { PrismaService } from 'src/modules/prisma/prisma.service';
 export class MetricsCalculationService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getRetiradasPorCurso() {
-    const data = await this.prisma.movements.groupBy({
+  async getWithdrawalsByCourse() {
+    const groupedMovements = await this.prisma.movements.groupBy({
       by: ['schedule_id'],
       _count: {
         _all: true,
       },
     });
 
-    const schedules = await this.prisma.schedules.findMany({
+    const allSchedules = await this.prisma.schedules.findMany({
       include: {
         courses: {
           select: {
@@ -24,29 +24,32 @@ export class MetricsCalculationService {
       },
     });
 
-    const contadorPorCurso: Record<string, number> = {};
+    const withdrawalsByCourse: Record<string, number> = {};
 
-    for (const item of data) {
-      const schedule = schedules.find((s) => s.id === item.schedule_id);
-      if (!schedule || !schedule.course_id) continue;
+    for (const movement of groupedMovements) {
+      const relatedSchedule = allSchedules.find(
+        (schedule) => schedule.id === movement.schedule_id,
+      );
 
-      const curso = schedule.courses.short_name;
-      contadorPorCurso[curso] =
-        (contadorPorCurso[curso] || 0) + item._count._all;
+      if (!relatedSchedule || !relatedSchedule.course_id) continue;
+
+      const courseShortName = relatedSchedule.courses.short_name;
+      withdrawalsByCourse[courseShortName] =
+        (withdrawalsByCourse[courseShortName] || 0) + movement._count._all;
     }
 
-    const resultado = Object.entries(contadorPorCurso).map(
-      ([curso, quantidade]) => ({
-        curso,
-        quantidade,
+    const result = Object.entries(withdrawalsByCourse).map(
+      ([course, total]) => ({
+        course,
+        total,
       }),
     );
 
-    return resultado;
+    return result;
   }
 
-  async getModaNotebook() {
-    const data = await this.prisma.movements.groupBy({
+  async getMostFrequentNotebook() {
+    const groupedMovements = await this.prisma.movements.groupBy({
       by: ['notebook_id'],
       _count: {
         notebook_id: true,
@@ -59,38 +62,41 @@ export class MetricsCalculationService {
       take: 1,
     });
 
-    if (!data.length) return null;
+    if (!groupedMovements.length) return null;
 
     const notebook = await this.prisma.notebooks.findUnique({
-      where: { id: data[0].notebook_id },
-      select: { device_name: true },
+      where: { id: groupedMovements[0].notebook_id },
+      select: { device_name: true, serial_number: true },
     });
 
     if (!notebook) return null;
 
     return {
-      nome_notebook: notebook.device_name,
-      quantidade: data[0]._count.notebook_id,
+      notebookName: notebook.device_name,
+      notebookSerialNumber: notebook.serial_number,
+      total: groupedMovements[0]._count.notebook_id,
     };
   }
 
-  async getMediaTempoUso(): Promise<number> {
-    //   const result = await this.prisma.$queryRaw<{ media_minutos: number }[]>`
-    //   SELECT AVG(TIMESTAMPDIFF(MINUTE, checkout_datetime, return_datetime)) AS media_minutos
-    //   FROM movements
-    //   WHERE return_datetime IS NOT NULL
-    // `;
-
+  async getAverageUsageTime(): Promise<number> {
+    /* Versão alternativa mais simples (menos precisa):
     const result = await this.prisma.$queryRaw<{ media_minutos: number }[]>`
-      SELECT AVG(TIMESTAMPDIFF(SECOND, checkout_datetime, return_datetime) / 60) AS media_minutos
+      SELECT AVG(TIMESTAMPDIFF(MINUTE, checkout_datetime, return_datetime)) AS media_minutos
       FROM movements
       WHERE return_datetime IS NOT NULL
     `;
+    */
+
+    const result = await this.prisma.$queryRaw<{ media_minutos: number }[]>`
+    SELECT AVG(TIMESTAMPDIFF(SECOND, checkout_datetime, return_datetime) / 60) AS media_minutos
+    FROM movements
+    WHERE return_datetime IS NOT NULL
+  `;
 
     return result[0]?.media_minutos ?? 0;
   }
 
-  async getMedianaTempoUso() {
+  async getMedianUsageTime() {
     const result = await this.prisma.$queryRaw<{ mediana_minutos: number }[]>`
     WITH OrderedMovements AS (
       SELECT
@@ -103,10 +109,8 @@ export class MetricsCalculationService {
     SELECT 
       CASE
         WHEN total_count % 2 = 1 THEN
-          -- Se o total de registros for ímpar, pegamos o valor central
           (SELECT tempo_uso FROM OrderedMovements WHERE row_num = (total_count + 1) / 2)
         ELSE
-          -- Se o total de registros for par, pegamos a média dos dois valores centrais
           (SELECT AVG(tempo_uso) FROM OrderedMovements WHERE row_num IN (total_count / 2, total_count / 2 + 1))
       END AS mediana_minutos
     FROM OrderedMovements
@@ -116,8 +120,8 @@ export class MetricsCalculationService {
     return result[0]?.mediana_minutos || 0;
   }
 
-  async getRetiradaPorPeriodo() {
-    const data = await this.prisma.movements.groupBy({
+  async getWithdrawalsByPeriod() {
+    const groupedWithdrawals = await this.prisma.movements.groupBy({
       by: ['schedule_id'],
       _count: {
         _all: true,
@@ -135,30 +139,26 @@ export class MetricsCalculationService {
       },
     });
 
-    const contadorPorPeriodo: Record<string, number> = {};
+    const countByPeriod: Record<string, number> = {};
 
-    for (const item of data) {
+    for (const item of groupedWithdrawals) {
       const schedule = schedules.find((s) => s.id === item.schedule_id);
       if (!schedule || !schedule.course_id) continue;
 
       const period = schedule.courses.period;
-      contadorPorPeriodo[period] =
-        (contadorPorPeriodo[period] || 0) + item._count._all;
+      countByPeriod[period] = (countByPeriod[period] || 0) + item._count._all;
     }
 
-    const resultado = Object.entries(contadorPorPeriodo).map(
-      ([period, quantidade]) => ({
-        period,
-        quantidade,
-      }),
-    );
+    const result = Object.entries(countByPeriod).map(([period, quantity]) => ({
+      period,
+      quantity,
+    }));
 
-    return resultado;
+    return result;
   }
 
-  async getTop5TempoUso() {
-    // Consulta raw para calcular tempo médio de uso por notebook_id
-    const medias = await this.prisma.$queryRaw<
+  async getTop5LongestAverageUsage() {
+    const averageTimes = await this.prisma.$queryRaw<
       { notebook_id: number; media_minutos: number }[]
     >`
     SELECT
@@ -171,8 +171,8 @@ export class MetricsCalculationService {
     LIMIT 5
   `;
 
-    // Busca os nomes dos notebooks
-    const notebookIds = medias.map((m) => m.notebook_id);
+    const notebookIds = averageTimes.map((item) => item.notebook_id);
+
     const notebooks = await this.prisma.notebooks.findMany({
       where: {
         id: {
@@ -185,20 +185,19 @@ export class MetricsCalculationService {
       },
     });
 
-    // Junta os dados
-    const resultado = medias.map((item) => {
+    const result = averageTimes.map((item) => {
       const notebook = notebooks.find((n) => n.id === item.notebook_id);
       return {
-        nome_notebook: notebook?.device_name || 'Desconhecido',
-        tempo_medio_uso_minutos: Number(item.media_minutos.toFixed(2)),
+        notebookName: notebook?.device_name || 'Desconhecido',
+        averageUsageTimeMinutes: Number(item.media_minutos.toFixed(2)),
       };
     });
 
-    return resultado;
+    return result;
   }
 
-  async getDesvioPadrao() {
-    const movimentos = await this.prisma.movements.findMany({
+  async getUsageTimeStandardDeviation() {
+    const movements = await this.prisma.movements.findMany({
       where: {
         return_datetime: {
           not: null,
@@ -210,31 +209,32 @@ export class MetricsCalculationService {
       },
     });
 
-    // Calcular todos os tempos de uso em minutos
-    const tempos = movimentos.map((m) => {
-      const inicio = new Date(m.checkout_datetime).getTime();
-      const fim = new Date(m.return_datetime!).getTime();
-      const minutos = (fim - inicio) / 1000 / 60;
-      return minutos;
+    const durations = movements.map((movement) => {
+      const start = new Date(movement.checkout_datetime).getTime();
+      const end = new Date(movement.return_datetime!).getTime();
+      return (end - start) / 1000 / 60;
     });
 
-    if (tempos.length === 0) return { desvio_padrao: 0 };
+    if (durations.length === 0) {
+      return { standardDeviation: 0 };
+    }
 
-    const media = tempos.reduce((acc, val) => acc + val, 0) / tempos.length;
+    const average =
+      durations.reduce((acc, val) => acc + val, 0) / durations.length;
 
-    const variancia =
-      tempos.reduce((acc, val) => acc + Math.pow(val - media, 2), 0) /
-      tempos.length;
+    const variance =
+      durations.reduce((acc, val) => acc + Math.pow(val - average, 2), 0) /
+      durations.length;
 
-    const desvioPadrao = Math.sqrt(variancia);
+    const standardDeviation = Math.sqrt(variance);
 
     return {
-      desvio_padrao: desvioPadrao.toFixed(2),
+      standardDeviation: Number(standardDeviation.toFixed(2)),
     };
   }
 
-  async getDistribuicaoNormal() {
-    const movimentos = await this.prisma.movements.findMany({
+  async getNormalDistribution() {
+    const movements = await this.prisma.movements.findMany({
       where: {
         return_datetime: {
           not: null,
@@ -246,82 +246,83 @@ export class MetricsCalculationService {
       },
     });
 
-    const temposUso = movimentos.map((m) => {
-      const inicio = new Date(m.checkout_datetime).getTime();
-      const fim = new Date(m.return_datetime).getTime();
-      return (fim - inicio) / 60000; // minutos
+    const usageTimes = movements.map((movement) => {
+      const start = new Date(movement.checkout_datetime).getTime();
+      const end = new Date(movement.return_datetime).getTime();
+      return (end - start) / 60000; // minutes
     });
 
-    if (temposUso.length === 0) return [];
+    if (usageTimes.length === 0) return [];
 
-    const media =
-      temposUso.reduce((acc, tempo) => acc + tempo, 0) / temposUso.length;
+    const mean =
+      usageTimes.reduce((acc, time) => acc + time, 0) / usageTimes.length;
 
-    const variancia =
-      temposUso.reduce((acc, tempo) => acc + Math.pow(tempo - media, 2), 0) /
-      temposUso.length;
+    const variance =
+      usageTimes.reduce((acc, time) => acc + Math.pow(time - mean, 2), 0) /
+      usageTimes.length;
 
-    const desvioPadrao = Math.sqrt(variancia);
+    const standardDeviation = Math.sqrt(variance);
 
-    const passo = 5; // intervalo em minutos
-    const xMin = 0;
-    const xMax = Math.ceil(media + 4 * desvioPadrao);
+    const interval = 5; // interval in minutes
+    const minX = 0;
+    const maxX = Math.ceil(mean + 4 * standardDeviation);
 
-    const distribuicao = [];
+    const distribution = [];
 
-    for (let x = xMin; x <= xMax; x += passo) {
-      const expoente =
-        -Math.pow(x - media, 2) / (2 * Math.pow(desvioPadrao, 2));
+    for (let x = minX; x <= maxX; x += interval) {
+      const exponent =
+        -Math.pow(x - mean, 2) / (2 * Math.pow(standardDeviation, 2));
       const y =
-        (1 / (desvioPadrao * Math.sqrt(2 * Math.PI))) * Math.exp(expoente);
-      distribuicao.push({ x, y: parseFloat(y.toFixed(6)) });
+        (1 / (standardDeviation * Math.sqrt(2 * Math.PI))) * Math.exp(exponent);
+      distribution.push({ x, y: parseFloat(y.toFixed(6)) });
     }
 
-    return distribuicao;
+    return distribution;
   }
 
-  async getPrevisaoRetiradas() {
-    const totais = await this.prisma.$queryRawUnsafe<
-      { dia_semana: number; total: bigint; dias_distintos: bigint }[]
+  async getWithdrawalForecast() {
+    const totals = await this.prisma.$queryRawUnsafe<
+      { day_of_week: number; total: bigint; distinct_days: bigint }[]
     >(`
     SELECT
-      DAYOFWEEK(checkout_datetime) - 1 AS dia_semana,
+      DAYOFWEEK(checkout_datetime) - 1 AS day_of_week,
       COUNT(*) AS total,
-      COUNT(DISTINCT DATE(checkout_datetime)) AS dias_distintos
+      COUNT(DISTINCT DATE(checkout_datetime)) AS distinct_days
     FROM movements
     WHERE return_datetime IS NOT NULL
-      AND DAYOFWEEK(checkout_datetime) BETWEEN 2 AND 7 -- Segunda (2) a Sábado (7)
-    GROUP BY dia_semana
-    ORDER BY dia_semana
+      AND DAYOFWEEK(checkout_datetime) BETWEEN 2 AND 7 -- Monday (2) to Saturday (7)
+    GROUP BY day_of_week
+    ORDER BY day_of_week
   `);
 
-    const medias = totais.map(({ dia_semana, total, dias_distintos }) => ({
-      dia_semana: Number(dia_semana),
-      media: dias_distintos > 0 ? Number(total) / Number(dias_distintos) : 0,
+    const averages = totals.map(({ day_of_week, total, distinct_days }) => ({
+      day_of_week: Number(day_of_week),
+      average: distinct_days > 0 ? Number(total) / Number(distinct_days) : 0,
     }));
 
-    const hoje = new Date();
+    const today = new Date();
 
-    const previsaoRetiradas = Array.from({ length: 7 }, (_, i) => {
-      const data = new Date();
-      data.setDate(hoje.getDate() + i + 1);
+    const forecast = Array.from({ length: 7 }, (_, i) => {
+      const date = new Date();
+      date.setDate(today.getDate() + i + 1);
 
-      const diaSemana = data.getDay(); // JS: 0 = domingo, ..., 6 = sábado
+      const dayOfWeek = date.getDay(); // JS: 0 = Sunday, ..., 6 = Saturday
 
-      const media = medias.find((m) => m.dia_semana === diaSemana)?.media || 0;
+      const average =
+        averages.find((a) => a.day_of_week === dayOfWeek)?.average || 0;
 
       return {
-        proxima_data: data.toISOString().split('T')[0],
-        quantidade_estimativa: Math.round(media),
+        next_date: date.toISOString().split('T')[0],
+        estimated_quantity: Math.round(average),
       };
     });
 
-    return previsaoRetiradas;
+    return forecast;
   }
 
-  async getRetiradasPorDiaUltimaSemana() {
-    const resultados = await this.prisma.$queryRaw<
-      { dia_semana: string; total: bigint }[]
+  async getDailyWithdrawalsLastWeek() {
+    const results = await this.prisma.$queryRaw<
+      { day_of_week: string; total: bigint }[]
     >`
     SELECT 
       CASE DAYOFWEEK(checkout_datetime)
@@ -332,20 +333,19 @@ export class MetricsCalculationService {
         WHEN 6 THEN 'Sexta'
         WHEN 7 THEN 'Sábado'
         WHEN 1 THEN 'Domingo'
-      END AS dia_semana,
+      END AS day_of_week,
       COUNT(*) AS total
     FROM movements
     WHERE 
       WEEKOFYEAR(checkout_datetime) = WEEKOFYEAR(CURDATE()) - 1
-    GROUP BY dia_semana
+    GROUP BY day_of_week
     ORDER BY FIELD(
-      dia_semana, 
+      day_of_week, 
       'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'
     )
   `;
 
-    // Definindo os dias da semana com valor 0 inicialmente
-    const diasDaSemana = [
+    const daysOfWeek = [
       'Domingo',
       'Segunda',
       'Terça',
@@ -355,28 +355,26 @@ export class MetricsCalculationService {
       'Sábado',
     ];
 
-    // Inicializando todos os dias com total de 0
-    const resultadosComZero = diasDaSemana.map((dia) => ({
-      dia,
-      total_retiradas: 0,
+    const resultsWithZero = daysOfWeek.map((day) => ({
+      day,
+      total_withdrawals: 0,
     }));
 
-    // Atualizando os dias com os valores retornados pela query
-    resultados.forEach((item) => {
-      const diaSemana = item.dia_semana;
+    results.forEach((item) => {
+      const dayOfWeek = item.day_of_week;
       const total = Number(item.total);
 
-      const dia = resultadosComZero.find((d) => d.dia === diaSemana);
-      if (dia) {
-        dia.total_retiradas = total;
+      const day = resultsWithZero.find((d) => d.day === dayOfWeek);
+      if (day) {
+        day.total_withdrawals = total;
       }
     });
 
-    return resultadosComZero;
+    return resultsWithZero;
   }
 
-  async getNotebooksNaoDevolvidos() {
-    const resultados = await this.prisma.$queryRawUnsafe<
+  async getUnreturnedNotebooks() {
+    const results = await this.prisma.$queryRawUnsafe<
       {
         device_name: string;
         discipline: string;
@@ -394,7 +392,7 @@ export class MetricsCalculationService {
     ORDER BY m.checkout_datetime DESC
   `);
 
-    return resultados.map((item) => ({
+    return results.map((item) => ({
       device_name: item.device_name,
       discipline: item.discipline,
       checkout_datetime: item.checkout_datetime,

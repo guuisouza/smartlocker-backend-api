@@ -8,19 +8,19 @@ export class MetricsService {
 
   async getDashboardData(): Promise<DashboardResponseDto> {
     return {
-      retiradaPorCurso: await this.calculations.getRetiradasPorCurso(),
-      modaNotebook: await this.calculations.getModaNotebook(),
-      mediaTempoUso: await this.calculations.getMediaTempoUso(),
-      medianaTempoUso: await this.calculations.getMedianaTempoUso(),
-      retiradaPorPeriodo: await this.calculations.getRetiradaPorPeriodo(),
-      top5TempoUso: await this.calculations.getTop5TempoUso(),
-      desvioPadrao: await this.calculations.getDesvioPadrao(),
-      distribuicaoNormal: await this.calculations.getDistribuicaoNormal(),
-      previsaoRetiradas: await this.calculations.getPrevisaoRetiradas(),
-      retiradasPorDiaUltimaSemana:
-        await this.calculations.getRetiradasPorDiaUltimaSemana(),
-      notebooksNaoDevolvidos:
-        await this.calculations.getNotebooksNaoDevolvidos(),
+      withdrawalsByCourse: await this.calculations.getWithdrawalsByCourse(),
+      mostFrequentNotebook: await this.calculations.getMostFrequentNotebook(),
+      averageUsageTime: await this.calculations.getAverageUsageTime(),
+      medianUsageTime: await this.calculations.getMedianUsageTime(),
+      withdrawalsByPeriod: await this.calculations.getWithdrawalsByPeriod(),
+      top5LongestAverageUsage:
+        await this.calculations.getTop5LongestAverageUsage(),
+      usageTimeStdDev: await this.calculations.getUsageTimeStandardDeviation(),
+      normalDistribution: await this.calculations.getNormalDistribution(),
+      withdrawalForecast: await this.calculations.getWithdrawalForecast(),
+      dailyWithdrawalsLastWeek:
+        await this.calculations.getDailyWithdrawalsLastWeek(),
+      unreturnedNotebooks: await this.calculations.getUnreturnedNotebooks(),
     };
   }
 }
