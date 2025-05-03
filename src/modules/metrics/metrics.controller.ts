@@ -1,13 +1,14 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, UseGuards } from '@nestjs/common';
 import { MetricsService } from './metrics.service';
-import { DashboardResponseDto } from './dto/dashboard-response.dto';
+import { JwtAuthGuard } from 'src/guards/jwt-auth-guard';
 
+@UseGuards(JwtAuthGuard)
 @Controller('dashboard')
 export class MetricsController {
   constructor(private readonly metricsService: MetricsService) {}
 
   @Get()
-  async getDashboard(): Promise<DashboardResponseDto> {
+  async getDashboard() {
     return this.metricsService.getDashboardData();
   }
 }
