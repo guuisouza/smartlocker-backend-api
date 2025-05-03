@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './modules/auth/auth.module';
 import { NfcCaptureModule } from './modules/nfc_caputre/nfc-capture.module';
 import { MovementsModule } from './modules/movements/movements.module';
+import { MetricsModule } from './modules/metrics/metrics.module';
 
 @Module({
   imports: [
@@ -10,6 +11,7 @@ import { MovementsModule } from './modules/movements/movements.module';
     AuthModule,
     NfcCaptureModule,
     MovementsModule,
+    MetricsModule,
   ],
   controllers: [],
   providers: [],
