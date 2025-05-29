@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import { differenceInMilliseconds, differenceInMinutes } from 'date-fns';
+import { mean, median } from 'simple-statistics';
 import { PrismaService } from 'src/modules/prisma/prisma.service';
 
 @Injectable()
@@ -79,45 +81,53 @@ export class MetricsCalculationService {
   }
 
   async getAverageUsageTime(): Promise<number> {
-    /* Versão alternativa mais simples (menos precisa):
-    const result = await this.prisma.$queryRaw<{ media_minutos: number }[]>`
-      SELECT AVG(TIMESTAMPDIFF(MINUTE, checkout_datetime, return_datetime)) AS media_minutos
-      FROM movements
-      WHERE return_datetime IS NOT NULL
-    `;
-    */
+    // Busca todos os movimentos com devolução registrada
+    const movements = await this.prisma.movements.findMany({
+      where: {
+        return_datetime: { not: null },
+      },
+      select: {
+        checkout_datetime: true,
+        return_datetime: true,
+      },
+    });
 
-    const result = await this.prisma.$queryRaw<{ media_minutos: number }[]>`
-    SELECT AVG(TIMESTAMPDIFF(SECOND, checkout_datetime, return_datetime) / 60) AS media_minutos
-    FROM movements
-    WHERE return_datetime IS NOT NULL
-  `;
+    const usageTimes = movements.map(
+      (movement) =>
+        differenceInMilliseconds(
+          new Date(movement.return_datetime),
+          new Date(movement.checkout_datetime),
+        ) /
+        1000 /
+        60, // converte ms → s → minutos (com fração)
+    );
 
-    return result[0]?.media_minutos ?? 0;
+    return usageTimes.length > 0 ? mean(usageTimes) : 0;
   }
 
-  async getMedianUsageTime() {
-    const result = await this.prisma.$queryRaw<{ mediana_minutos: number }[]>`
-    WITH OrderedMovements AS (
-      SELECT
-        TIMESTAMPDIFF(SECOND, checkout_datetime, return_datetime) / 60 AS tempo_uso,
-        ROW_NUMBER() OVER (ORDER BY TIMESTAMPDIFF(SECOND, checkout_datetime, return_datetime) / 60.0) AS row_num,
-        COUNT(*) OVER () AS total_count
-      FROM movements
-      WHERE return_datetime IS NOT NULL
-    )
-    SELECT 
-      CASE
-        WHEN total_count % 2 = 1 THEN
-          (SELECT tempo_uso FROM OrderedMovements WHERE row_num = (total_count + 1) / 2)
-        ELSE
-          (SELECT AVG(tempo_uso) FROM OrderedMovements WHERE row_num IN (total_count / 2, total_count / 2 + 1))
-      END AS mediana_minutos
-    FROM OrderedMovements
-    LIMIT 1;
-  `;
+  async getMedianUsageTime(): Promise<number> {
+    const movements = await this.prisma.movements.findMany({
+      where: {
+        return_datetime: {
+          not: null,
+        },
+      },
+      select: {
+        checkout_datetime: true,
+        return_datetime: true,
+      },
+    });
 
-    return result[0]?.mediana_minutos || 0;
+    const durations = movements.map((movement) =>
+      differenceInMinutes(
+        new Date(movement.return_datetime),
+        new Date(movement.checkout_datetime),
+      ),
+    );
+
+    if (durations.length === 0) return 0;
+
+    return median(durations);
   }
 
   async getWithdrawalsByPeriod() {
