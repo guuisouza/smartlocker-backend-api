@@ -4,9 +4,9 @@ export class DashboardResponseDto {
     total: number;
   }[];
 
-  mostFrequentNotebook: {
-    notebookName: string;
-    notebookSerialNumber: string;
+  mostFrequentDiscipline: {
+    disciplineName: string;
+    dayOfDiscipline: string;
     total: number;
   };
 
@@ -48,4 +48,9 @@ export class DashboardResponseDto {
     discipline: string;
     checkout_datetime: string;
   }[];
+
+  usageTimeSkewness: {
+    skewness: number;
+    interpretation: string;
+  };
 }

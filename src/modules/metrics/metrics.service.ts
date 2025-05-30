@@ -9,7 +9,8 @@ export class MetricsService {
   async getDashboardData(): Promise<DashboardResponseDto> {
     return {
       withdrawalsByCourse: await this.calculations.getWithdrawalsByCourse(),
-      mostFrequentNotebook: await this.calculations.getMostFrequentNotebook(),
+      mostFrequentDiscipline:
+        await this.calculations.getMostFrequentDiscipline(),
       averageUsageTime: await this.calculations.getAverageUsageTime(),
       medianUsageTime: await this.calculations.getMedianUsageTime(),
       withdrawalsByPeriod: await this.calculations.getWithdrawalsByPeriod(),
@@ -21,6 +22,7 @@ export class MetricsService {
       dailyWithdrawalsLastWeek:
         await this.calculations.getDailyWithdrawalsLastWeek(),
       unreturnedNotebooks: await this.calculations.getUnreturnedNotebooks(),
+      usageTimeSkewness: await this.calculations.getUsageTimeSkewness(),
     };
   }
 }
