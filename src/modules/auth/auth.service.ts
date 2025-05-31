@@ -18,7 +18,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
-  async register(data: RegisterAuthBodyDTO): Promise<users> {
+  async register(data: RegisterAuthBodyDTO): Promise<Omit<users, 'password'>> {
     const foundUser = await this.findUserByEmail(data.email);
 
     if (foundUser) {
@@ -29,7 +29,7 @@ export class AuthService {
 
     const createdAt = await this.prisma.$queryRaw`SELECT NOW() as now`;
 
-    return await this.prisma.users.create({
+    const user = await this.prisma.users.create({
       data: {
         name: data.name,
         email: data.email,
@@ -37,6 +37,10 @@ export class AuthService {
         createdAt: createdAt[0].now,
       },
     });
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { password, ...userWithoutPassword } = user;
+    return userWithoutPassword;
   }
 
   async login(data: LoginAuthBodyDTO) {
