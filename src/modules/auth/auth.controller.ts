@@ -25,11 +25,58 @@ export class AuthController {
   })
   @ApiResponse({
     status: 400,
-    description: 'Field (name/email/password) cannot be empty.',
+    description: 'Bad Request - Invalid values',
+    content: {
+      'application/json': {
+        examples: {
+          nameBadRequest: {
+            summary: 'Empty name value or invalid format',
+            value: {
+              message: ['name must be a string', 'name should not be empty'],
+              error: 'Bad Request',
+              statusCode: 400,
+            },
+          },
+          emailBadRequest: {
+            summary: 'Empty email or invalid format',
+            value: {
+              message: ['email must be an email', 'email should not be empty'],
+              error: 'Bad Request',
+              statusCode: 400,
+            },
+          },
+          passwordBadRequest: {
+            summary: 'Empty password or invalid format',
+            value: {
+              message: [
+                'password must be a string',
+                'password should not be empty',
+              ],
+              error: 'Bad Request',
+              statusCode: 400,
+            },
+          },
+        },
+      },
+    },
   })
   @ApiResponse({
     status: 409,
-    description: 'This user email already exists.',
+    description: 'Conflict - This user email already exists.',
+    content: {
+      'application/json': {
+        examples: {
+          emailConflict: {
+            summary: 'This manager email has already been registered',
+            value: {
+              message: 'this user email already exists',
+              error: 'Conflict',
+              statusCode: 409,
+            },
+          },
+        },
+      },
+    },
   })
   @Post('register')
   async register(@Body() data: RegisterAuthBodyDTO) {
@@ -55,11 +102,50 @@ export class AuthController {
   })
   @ApiResponse({
     status: 400,
-    description: 'Field (email or password) cannot be empty.',
+    description: 'Bad Request - Invalid values',
+    content: {
+      'application/json': {
+        examples: {
+          emailBadRequest: {
+            summary: 'Empty email or invalid format',
+            value: {
+              message: ['email must be an email', 'email should not be empty'],
+              error: 'Bad Request',
+              statusCode: 400,
+            },
+          },
+          passwordBadRequest: {
+            summary: 'Empty password or invalid format',
+            value: {
+              message: [
+                'password must be a string',
+                'password should not be empty',
+              ],
+              error: 'Bad Request',
+              statusCode: 400,
+            },
+          },
+        },
+      },
+    },
   })
   @ApiResponse({
     status: 401,
-    description: 'Incorrect email or password.',
+    description: 'Unauthorized - Incorrect email or password',
+    content: {
+      'application/json': {
+        examples: {
+          loginUnauthorized: {
+            summary: 'Incorrect email or password field values',
+            value: {
+              message: 'incorrect email or password',
+              error: 'Unauthorized',
+              statusCode: 401,
+            },
+          },
+        },
+      },
+    },
   })
   @HttpCode(200)
   @Post('login')
