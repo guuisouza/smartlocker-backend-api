@@ -1,4 +1,14 @@
 import { Injectable } from '@nestjs/common';
+import { differenceInMilliseconds, differenceInMinutes } from 'date-fns';
+import {
+  cumulativeStdNormalProbability,
+  linearRegression,
+  linearRegressionLine,
+  mean,
+  median,
+  sampleSkewness,
+  standardDeviation,
+} from 'simple-statistics';
 import { PrismaService } from 'src/modules/prisma/prisma.service';
 
 @Injectable()
@@ -48,15 +58,15 @@ export class MetricsCalculationService {
     return result;
   }
 
-  async getMostFrequentNotebook() {
+  async getMostFrequentDiscipline() {
     const groupedMovements = await this.prisma.movements.groupBy({
-      by: ['notebook_id'],
+      by: ['schedule_id'],
       _count: {
-        notebook_id: true,
+        schedule_id: true,
       },
       orderBy: {
         _count: {
-          notebook_id: 'desc',
+          schedule_id: 'desc',
         },
       },
       take: 1,
@@ -64,60 +74,67 @@ export class MetricsCalculationService {
 
     if (!groupedMovements.length) return null;
 
-    const notebook = await this.prisma.notebooks.findUnique({
-      where: { id: groupedMovements[0].notebook_id },
-      select: { device_name: true, serial_number: true },
+    const disciplineData = await this.prisma.schedules.findUnique({
+      where: { id: groupedMovements[0].schedule_id },
+      select: { discipline: true, day_of_week: true },
     });
 
-    if (!notebook) return null;
+    if (!disciplineData) return null;
 
     return {
-      notebookName: notebook.device_name,
-      notebookSerialNumber: notebook.serial_number,
-      total: groupedMovements[0]._count.notebook_id,
+      disciplineName: disciplineData.discipline,
+      dayOfDiscipline: disciplineData.day_of_week,
+      total: groupedMovements[0]._count.schedule_id,
     };
   }
 
   async getAverageUsageTime(): Promise<number> {
-    /* Versão alternativa mais simples (menos precisa):
-    const result = await this.prisma.$queryRaw<{ media_minutos: number }[]>`
-      SELECT AVG(TIMESTAMPDIFF(MINUTE, checkout_datetime, return_datetime)) AS media_minutos
-      FROM movements
-      WHERE return_datetime IS NOT NULL
-    `;
-    */
+    const movements = await this.prisma.movements.findMany({
+      where: {
+        return_datetime: { not: null },
+      },
+      select: {
+        checkout_datetime: true,
+        return_datetime: true,
+      },
+    });
 
-    const result = await this.prisma.$queryRaw<{ media_minutos: number }[]>`
-    SELECT AVG(TIMESTAMPDIFF(SECOND, checkout_datetime, return_datetime) / 60) AS media_minutos
-    FROM movements
-    WHERE return_datetime IS NOT NULL
-  `;
+    const usageTimes = movements.map(
+      (movement) =>
+        differenceInMilliseconds(
+          new Date(movement.return_datetime),
+          new Date(movement.checkout_datetime),
+        ) /
+        1000 /
+        60,
+    );
 
-    return result[0]?.media_minutos ?? 0;
+    return usageTimes.length > 0 ? mean(usageTimes) : 0;
   }
 
-  async getMedianUsageTime() {
-    const result = await this.prisma.$queryRaw<{ mediana_minutos: number }[]>`
-    WITH OrderedMovements AS (
-      SELECT
-        TIMESTAMPDIFF(SECOND, checkout_datetime, return_datetime) / 60 AS tempo_uso,
-        ROW_NUMBER() OVER (ORDER BY TIMESTAMPDIFF(SECOND, checkout_datetime, return_datetime) / 60.0) AS row_num,
-        COUNT(*) OVER () AS total_count
-      FROM movements
-      WHERE return_datetime IS NOT NULL
-    )
-    SELECT 
-      CASE
-        WHEN total_count % 2 = 1 THEN
-          (SELECT tempo_uso FROM OrderedMovements WHERE row_num = (total_count + 1) / 2)
-        ELSE
-          (SELECT AVG(tempo_uso) FROM OrderedMovements WHERE row_num IN (total_count / 2, total_count / 2 + 1))
-      END AS mediana_minutos
-    FROM OrderedMovements
-    LIMIT 1;
-  `;
+  async getMedianUsageTime(): Promise<number> {
+    const movements = await this.prisma.movements.findMany({
+      where: {
+        return_datetime: {
+          not: null,
+        },
+      },
+      select: {
+        checkout_datetime: true,
+        return_datetime: true,
+      },
+    });
 
-    return result[0]?.mediana_minutos || 0;
+    const durations = movements.map((movement) =>
+      differenceInMinutes(
+        new Date(movement.return_datetime),
+        new Date(movement.checkout_datetime),
+      ),
+    );
+
+    if (durations.length === 0) return 0;
+
+    return median(durations);
   }
 
   async getWithdrawalsByPeriod() {
@@ -196,7 +213,9 @@ export class MetricsCalculationService {
     return result;
   }
 
-  async getUsageTimeStandardDeviation() {
+  async getUsageTimeStandardDeviation(): Promise<{
+    standardDeviation: number;
+  }> {
     const movements = await this.prisma.movements.findMany({
       where: {
         return_datetime: {
@@ -209,27 +228,21 @@ export class MetricsCalculationService {
       },
     });
 
-    const durations = movements.map((movement) => {
-      const start = new Date(movement.checkout_datetime).getTime();
-      const end = new Date(movement.return_datetime!).getTime();
-      return (end - start) / 1000 / 60;
-    });
+    const durations = movements.map((movement) =>
+      differenceInMinutes(
+        new Date(movement.return_datetime!),
+        new Date(movement.checkout_datetime),
+      ),
+    );
 
     if (durations.length === 0) {
       return { standardDeviation: 0 };
     }
 
-    const average =
-      durations.reduce((acc, val) => acc + val, 0) / durations.length;
-
-    const variance =
-      durations.reduce((acc, val) => acc + Math.pow(val - average, 2), 0) /
-      durations.length;
-
-    const standardDeviation = Math.sqrt(variance);
+    const std = standardDeviation(durations);
 
     return {
-      standardDeviation: Number(standardDeviation.toFixed(2)),
+      standardDeviation: Number(std.toFixed(1)),
     };
   }
 
@@ -249,32 +262,32 @@ export class MetricsCalculationService {
     const usageTimes = movements.map((movement) => {
       const start = new Date(movement.checkout_datetime).getTime();
       const end = new Date(movement.return_datetime).getTime();
-      return (end - start) / 60000; // minutes
+      return (end - start) / 60000; // minutos
     });
 
     if (usageTimes.length === 0) return [];
 
-    const mean =
-      usageTimes.reduce((acc, time) => acc + time, 0) / usageTimes.length;
+    const _mean = mean(usageTimes);
+    const _std = standardDeviation(usageTimes); // sample std dev
 
-    const variance =
-      usageTimes.reduce((acc, time) => acc + Math.pow(time - mean, 2), 0) /
-      usageTimes.length;
-
-    const standardDeviation = Math.sqrt(variance);
-
-    const interval = 5; // interval in minutes
-    const minX = 0;
-    const maxX = Math.ceil(mean + 4 * standardDeviation);
-
+    const interval = 10;
+    const maxX = Math.ceil(_mean + 4 * _std);
     const distribution = [];
 
-    for (let x = minX; x <= maxX; x += interval) {
-      const exponent =
-        -Math.pow(x - mean, 2) / (2 * Math.pow(standardDeviation, 2));
-      const y =
-        (1 / (standardDeviation * Math.sqrt(2 * Math.PI))) * Math.exp(exponent);
-      distribution.push({ x, y: parseFloat(y.toFixed(6)) });
+    for (let x = 0; x <= maxX; x += interval) {
+      // PDF
+      const exponent = -Math.pow(x - _mean, 2) / (2 * Math.pow(_std, 2));
+      const y = (1 / (_std * Math.sqrt(2 * Math.PI))) * Math.exp(exponent);
+
+      // CDF
+      const z = (x - _mean) / _std;
+      const cdf = cumulativeStdNormalProbability(z); // prob até x
+
+      distribution.push({
+        x,
+        y: parseFloat(y.toFixed(6)), // PDF
+        cumulative: parseFloat(cdf.toFixed(6)), // CDF
+      });
     }
 
     return distribution;
@@ -284,38 +297,58 @@ export class MetricsCalculationService {
     const totals = await this.prisma.$queryRawUnsafe<
       { day_of_week: number; total: bigint; distinct_days: bigint }[]
     >(`
-    SELECT
-      DAYOFWEEK(checkout_datetime) - 1 AS day_of_week,
-      COUNT(*) AS total,
-      COUNT(DISTINCT DATE(checkout_datetime)) AS distinct_days
-    FROM movements
-    WHERE return_datetime IS NOT NULL
-      AND DAYOFWEEK(checkout_datetime) BETWEEN 2 AND 7 -- Monday (2) to Saturday (7)
-    GROUP BY day_of_week
-    ORDER BY day_of_week
-  `);
+      SELECT
+        DAYOFWEEK(checkout_datetime) - 1 AS day_of_week,
+        COUNT(*) AS total,
+        COUNT(DISTINCT DATE(checkout_datetime)) AS distinct_days
+      FROM movements
+      WHERE return_datetime IS NOT NULL
+        AND DAYOFWEEK(checkout_datetime) BETWEEN 2 AND 7 -- Monday (2) to Saturday (7)
+      GROUP BY day_of_week
+      ORDER BY day_of_week
+    `);
 
     const averages = totals.map(({ day_of_week, total, distinct_days }) => ({
-      day_of_week: Number(day_of_week),
-      average: distinct_days > 0 ? Number(total) / Number(distinct_days) : 0,
+      x: Number(day_of_week), // JS: 1 (Seg) a 6 (Sab)
+      y: distinct_days > 0 ? Number(total) / Number(distinct_days) : 0,
     }));
+
+    if (averages.length < 2) {
+      return [];
+    }
+
+    const regressionModel = linearRegression(
+      averages.map(({ x, y }) => [x, y]),
+    );
+    const predict = linearRegressionLine(regressionModel);
 
     const today = new Date();
 
-    const forecast = Array.from({ length: 7 }, (_, i) => {
+    const forecast = [];
+    let daysAdded = 0;
+    let i = 1;
+
+    while (daysAdded < 7) {
       const date = new Date();
-      date.setDate(today.getDate() + i + 1);
+      date.setDate(today.getDate() + i);
 
-      const dayOfWeek = date.getDay(); // JS: 0 = Sunday, ..., 6 = Saturday
+      const dayOfWeek = date.getDay(); // 0 = Domingo, 1 = Segunda, ..., 6 = Sabado
 
-      const average =
-        averages.find((a) => a.day_of_week === dayOfWeek)?.average || 0;
+      // Apenas prever para segunda (1) até sábado (6)
+      if (dayOfWeek >= 1 && dayOfWeek <= 6) {
+        const x = dayOfWeek;
+        const y = predict(x);
 
-      return {
-        next_date: date.toISOString().split('T')[0],
-        estimated_quantity: Math.round(average),
-      };
-    });
+        forecast.push({
+          next_date: date.toISOString().split('T')[0],
+          estimated_quantity: Math.max(0, Math.round(y)),
+        });
+
+        daysAdded++;
+      }
+
+      i++;
+    }
 
     return forecast;
   }
@@ -397,5 +430,49 @@ export class MetricsCalculationService {
       discipline: item.discipline,
       checkout_datetime: item.checkout_datetime,
     }));
+  }
+
+  async getUsageTimeSkewness() {
+    const movements = await this.prisma.movements.findMany({
+      where: {
+        return_datetime: {
+          not: null,
+        },
+      },
+      select: {
+        checkout_datetime: true,
+        return_datetime: true,
+      },
+    });
+
+    const usageTimes = movements.map((movement) => {
+      const start = new Date(movement.checkout_datetime).getTime();
+      const end = new Date(movement.return_datetime).getTime();
+      return (end - start) / 60000;
+    });
+
+    if (usageTimes.length < 3) {
+      return {
+        skewness: null,
+        interpretation: 'Dados insuficientes para calcular a assimetria.',
+      };
+    }
+
+    const skew = sampleSkewness(usageTimes);
+
+    let interpretation =
+      'Distribuição simétrica. A média representa bem os dados.';
+    if (skew > 0.5) {
+      interpretation =
+        'Distribuição assimétrica à direita: alguns usuários usam os notebooks por muito mais tempo que a média.';
+    } else if (skew < -0.5) {
+      interpretation =
+        'Distribuição assimétrica à esquerda: alguns usuários usam os notebooks por muito menos tempo que a média.';
+    }
+
+    return {
+      skewness: parseFloat(skew.toFixed(3)),
+      interpretation,
+    };
   }
 }
