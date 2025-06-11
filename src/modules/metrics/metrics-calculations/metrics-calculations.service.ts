@@ -262,7 +262,7 @@ export class MetricsCalculationService {
     const usageTimes = movements.map((movement) => {
       const start = new Date(movement.checkout_datetime).getTime();
       const end = new Date(movement.return_datetime).getTime();
-      return (end - start) / 60000; // minutos
+      return (end - start) / 60000;
     });
 
     if (usageTimes.length === 0) return [];
@@ -309,7 +309,7 @@ export class MetricsCalculationService {
     `);
 
     const averages = totals.map(({ day_of_week, total, distinct_days }) => ({
-      x: Number(day_of_week), // JS: 1 (Seg) a 6 (Sab)
+      x: Number(day_of_week),
       y: distinct_days > 0 ? Number(total) / Number(distinct_days) : 0,
     }));
 
@@ -322,32 +322,29 @@ export class MetricsCalculationService {
     );
     const predict = linearRegressionLine(regressionModel);
 
-    const today = new Date();
-
+    const nowUtc = new Date();
+    const todayBr = this.getBrasiliaDate(nowUtc); // sempre 00:00 do dia atual em BRT
+    
+    let date = new Date(todayBr);
+    date.setDate(date.getDate() + 1);
+    
     const forecast = [];
-    let daysAdded = 0;
-    let i = 1;
-
-    while (daysAdded < 7) {
-      const date = new Date();
-      date.setDate(today.getDate() + i);
-
-      const dayOfWeek = date.getDay(); // 0 = Domingo, 1 = Segunda, ..., 6 = Sabado
-
-      // Apenas prever para segunda (1) até sábado (6)
+    
+    while (forecast.length < 7) {
+      const brDate = this.getBrasiliaDate(date);
+      const dayOfWeek = brDate.getDay();
+    
       if (dayOfWeek >= 1 && dayOfWeek <= 6) {
         const x = dayOfWeek;
         const y = predict(x);
-
+    
         forecast.push({
-          next_date: date.toISOString().split('T')[0],
+          next_date: brDate.toLocaleDateString('en-CA'),
           estimated_quantity: Math.max(0, Math.round(y)),
         });
-
-        daysAdded++;
       }
-
-      i++;
+    
+      date.setDate(date.getDate() + 1);
     }
 
     return forecast;
@@ -474,5 +471,18 @@ export class MetricsCalculationService {
       skewness: parseFloat(skew.toFixed(3)),
       interpretation,
     };
+  }
+
+  getBrasiliaDate(date: Date): Date {
+    const utc = date.getTime();
+    const offset = -3 * 60 * 60 * 1000; // UTC-3 em ms
+    const brtDate = new Date(utc + offset);
+  
+    // Zera as horas para evitar erros com mudança de horário
+    return new Date(
+      brtDate.getFullYear(),
+      brtDate.getMonth(),
+      brtDate.getDate()
+    );
   }
 }
