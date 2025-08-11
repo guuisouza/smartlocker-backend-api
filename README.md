@@ -90,7 +90,7 @@ Para acessar a documentação interativa da SmartlockerAPI via SwaggerUI clique 
 
 #### METRICS (DASHBOARD)
 
-- `GET /dashboard` - Consultar aluno detalhadamente
+- `GET /dashboard` - Consultar dados estatísticos das movimentações  
 
 ## 📐 Arquitetura
 
